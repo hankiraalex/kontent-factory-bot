@@ -3,17 +3,21 @@ import threading
 import telebot
 from flask import Flask
 
-# 1. Сначала читаем переменные и проверяем их
+# 1. Читаем токен
 TOKEN = os.getenv("BOT_TOKEN")
 
 if not TOKEN:
-    print("ERROR: BOT_TOKEN is not set!")
-    exit(1)  # Принудительно завершаем работу, если токена нет
+    print("ERROR: BOT_TOKEN is not set in Environment Variables!")
+    exit(1)
 
-# 2. Инициализируем бота только после проверки токена
+# 2. Инициализируем бота
 bot = telebot.TeleBot(TOKEN)
 
-# 3. Регистрируем хендлеры (команды)
+# ВАЖНО: Эта команда сбрасывает любые старые соединения.
+# Она предотвращает ошибку 409, если предыдущий запуск не успел корректно завершиться.
+bot.remove_webhook()
+
+# 3. Хендлеры (команды)
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     bot.reply_to(message, "Привет! Я бот Kontent_Factory. Чем могу помочь?")
@@ -22,7 +26,7 @@ def send_welcome(message):
 def echo_all(message):
     bot.reply_to(message, f"Ты написал: {message.text}")
 
-# 4. Настраиваем Flask (только для проверки здоровья Render)
+# 4. Flask для Render (Healthcheck)
 app = Flask(__name__)
 
 @app.route('/')
@@ -30,15 +34,17 @@ def health():
     return "OK"
 
 def run_flask():
-    # ВАЖНО: Render сам назначает порт. Мы обязаны его прочитать.
+    # Читаем порт из переменной окружения Render
     port = int(os.getenv('PORT', 5000))
     print(f"Flask running on port {port}")
     app.run(host='0.0.0.0', port=port)
 
-# Запускаем Flask в отдельном потоке (daemon=True обязателен)
+# Запускаем Flask в отдельном потоке
 threading.Thread(target=run_flask, daemon=True).start()
 
-# 5. Запускаем polling только в самом конце
-print("Bot is polling...")
-bot.polling(none_stop=True, interval=3)
-
+# 5. Запуск polling (должен быть строго в конце)
+print("Starting bot polling...")
+try:
+    bot.polling(none_stop=True, interval=3)
+except Exception as e:
+    print(f"Polling error: {e}")
